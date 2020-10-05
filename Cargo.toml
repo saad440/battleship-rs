@@ -1,9 +1,26 @@
 [package]
 name = "battleship-rs"
 version = "0.1.0"
-authors = ["Saad <muhammad.saad3@gmail.com>"]
+authors = ["Saad <saad@disroot.org>"]
 edition = "2018"
+
+[lib]
+name = "libbattleship"
+path = "src/lib.rs"
+
+[[bin]]
+name = "battleship-server"
+path = "src/bin/battleship-server.rs"
+
+[[bin]]
+name = "battleship-client"
+path = "src/bin/battleship-client.rs"
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+almost = "0.2"
+rand = "0.7"
+strum = "0.19"
+strum_macros = "0.19"
