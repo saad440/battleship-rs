@@ -8,6 +8,7 @@ use rand::{
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use almost;
+use regex::Regex;
 
 
 pub struct Board {
@@ -362,6 +363,74 @@ impl Direction {
 }
 
 
+#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
+pub enum GameCommand {
+    StartGame,
+    Cell(i32,i32),
+    Quit,
+    InvalidCommand
+}
+
+
+pub fn command_parser (cmd: &str) -> GameCommand {
+    // Check 1. Is it STARTGAME?
+    if cmd == "STARTGAME" {
+        return GameCommand::StartGame
+    }
+    // Check 2. Is it a cell position?
+    let pattern_cell = r"^CELL:\[[0-9],[0-9]\]$";
+    let re_cell = Regex::new(pattern_cell).unwrap();
+    if re_cell.is_match(cmd) {
+        let x: i32 = String::from(cmd.chars().nth(6).unwrap()).parse().unwrap();
+        let y: i32 = String::from(cmd.chars().nth(8).unwrap()).parse().unwrap();
+        return GameCommand::Cell(x,y)
+    }
+    // Check 3. Is it a QUIT command?
+    if cmd == "QUIT" {
+        return GameCommand::Quit
+    }
+
+    GameCommand::InvalidCommand
+}
+
+
+pub enum CommandResult {
+    Success(String),
+    Failure(String),
+    Message(String),
+    Some(Board),
+    None,
+    Quit
+}
+
+
+pub fn command_handler(board: &mut Option<Board>, cmd:GameCommand) -> CommandResult {
+    match cmd {
+        GameCommand::StartGame => {
+            let board_new = Board::new();
+            return CommandResult::Some(board_new)
+        }
+        GameCommand::Cell(x,y) => {
+            let board = board.as_mut().unwrap();
+            let result = board.hit_cell(Position{x,y});
+            if result {
+                return CommandResult::Success(String::from("HIT"))
+            }
+            else {
+                return CommandResult::Failure(String::from("MISS"))
+            }
+        }
+        GameCommand::Quit => {
+            return CommandResult::Quit
+        }
+        GameCommand::InvalidCommand => {
+            return CommandResult::None
+        }
+    }
+}
+
+
+
 
 #[cfg(test)]
 mod tests {
@@ -376,5 +445,12 @@ mod tests {
             None => false
         };
         assert_eq!(something, true);
+    }
+
+    #[test]
+    fn commands_parsing_correctly () {
+        assert_eq!(command_parser("STARTGAME"), GameCommand::StartGame);
+        assert_eq!(command_parser("CELL:[3,1]"), GameCommand::Cell(3,1));
+        assert_eq!(command_parser("QUIT"), GameCommand::Quit);
     }
 }
