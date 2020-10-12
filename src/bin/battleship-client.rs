@@ -1,34 +1,49 @@
 use std::net::TcpStream;
-use std::io::{Read, Write, Error};
-use std::str::from_utf8;
+use std::io::{self, BufRead, Write, BufReader, BufWriter, Error};
+
 
 fn main() -> Result<(), Error> {
-    let conn = TcpStream::connect("localhost:8080");
-    match conn {
-        Ok(mut stream) => { println!("Successfully Connected to {}", stream.peer_addr()?); }
-        Err(e) => { println!("Error: {}", e); }
+    let stream = TcpStream::connect("localhost:8888")?;
+    println!("Successfully Connected to {}", stream.peer_addr()?);
+    let mut reader = BufReader::new(&stream);
+    let mut writer = BufWriter::new(&stream);
 
+    /*
+    // Automated play to test server-client interaction.
+    writer.write(b"STARTGAME\n")?;
+    writer.flush()?;
+    for x in 1..=9 {
+        for y in 1..=9 {
+            let cmd = format!("CELL:[{},{}]\n", x,y);
+            writer.write(&(cmd.clone().into_bytes()))?;
+            writer.flush()?;
+            let mut buff = String::new();
+            reader.read_line(&mut buff)?;
+        
+            println!("Server: {}", buff.trim());
+        }
+    }
+    */
+
+    loop {
+        print!("> ");
+        io::stdout().flush()?;
+        let mut inpt = String::new();
+        io::stdin().read_line(&mut inpt).expect("reading from stdin failed");
+        let msg = inpt.trim().to_string();
+        if msg == ":q" {break}
+        let mut m = msg.clone().into_bytes();
+        m.push(0xA);
+        writer.write(&m)?;
+        writer.flush()?;
+
+        if msg == "QUIT" {break}
+
+        let mut buff = String::new();
+        reader.read_line(&mut buff)?;
+        
+        println!("Server: {}", buff.trim());
     }
 
     Ok(())
 }
-
-/* 
-use rand::Rng;
-use libbattleships::{Board, Position};
-
- fn main() {
-     let mut board = Board::new();
-     board.setup();
-     board.display_board();
-     println!("= = = = = = = = =");
-     for _ in 1..100 {
-         let random_x: i32 = rand::thread_rng().gen_range(0,9);
-         let random_y: i32 = rand::thread_rng().gen_range(0,9);
-         let random_pos = Position::new(random_x, random_y);
-         board.hit_cell(random_pos);
-     }
-     board.display_board();
- }
- */
- 

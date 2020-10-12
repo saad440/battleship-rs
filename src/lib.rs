@@ -398,6 +398,7 @@ pub enum CommandResult {
     Success(String),
     Failure(String),
     Message(String),
+    GameComplete(i32),  // TODO: Implement some kind of score to return
     Some(Board),
     None,
     Quit
@@ -407,13 +408,21 @@ pub enum CommandResult {
 pub fn command_handler(board: &mut Option<Board>, cmd:GameCommand) -> CommandResult {
     match cmd {
         GameCommand::StartGame => {
-            let board_new = Board::new();
+            let mut board_new = Board::new();
+            board_new.setup();
             return CommandResult::Some(board_new)
         }
         GameCommand::Cell(x,y) => {
+            // Make sure a board exists
+            if let None = board {
+                return CommandResult::Failure(String::from("No game started yet."));
+            }
             let board = board.as_mut().unwrap();
             let result = board.hit_cell(Position{x,y});
             if result {
+                if board.is_game_complete() {
+                    return CommandResult::GameComplete(0);
+                    }
                 return CommandResult::Success(String::from("HIT"))
             }
             else {
