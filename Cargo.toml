@@ -21,7 +21,7 @@ path = "src/bin/battleship-client.rs"
 
 [dependencies]
 almost = "0.2"
-rand = "0.7"
-strum = "0.19"
-strum_macros = "0.19"
+rand = "0.8"
+strum = "0.24"
+strum_macros = "0.24"
 regex = "1.3"

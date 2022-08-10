@@ -20,6 +20,42 @@ pub struct Board {
     game_complete: bool
 }
 
+pub enum BoardConfig {
+    Auto,
+    Manual(HashMap<ShipType, (Position, Direction)>)
+}
+
+impl BoardConfig {
+    pub fn validate(&self) -> bool {
+        match self {
+            Self::Auto => true,
+            Self::Manual(manualconf) => Self::validate_manual(manualconf)
+        }
+    }
+
+    pub fn validate_manual(boardconf: &HashMap<ShipType, (Position, Direction)>) -> bool {
+        let mut board = Board::new();  // Make a temporary board
+        let mut occupied_cells = HashSet::<Position>::new();
+        for shiptype in ShipType::iter() {
+            let mut ship = Ship::new(shiptype);
+            let ship_pos = boardconf.get(&shiptype);
+            if let None = ship_pos {
+                continue;
+            }
+            let (pos, dir) = ship_pos.unwrap();
+            let place_result = board.place_ship_manual(&ship, pos, dir);
+            if let Err(msg) = place_result {
+                return false
+            }
+            let cells_taken = place_result.unwrap();
+            occupied_cells.extend(cells_taken.clone());
+            ship.cells = cells_taken;
+            board.ships.insert(ship);
+        }
+        true
+    }
+}
+
 impl Board {
     const COLS: [char;9] = ['A','B','C','D','E','F','G','H','I'];
     const ROWS: [u8;9] = [1,2,3,4,5,6,7,8,9];
@@ -41,12 +77,30 @@ impl Board {
         Board{cells:cells, ships:ships, game_complete:false, n_rows, n_cols, game_progress}
     }
 
-    pub fn setup(&mut self) {
-        for shiptype in ShipType::iter() {
-            let mut ship = Ship::new(shiptype);
-            let cells_taken = self.place_ship(&ship);
-            ship.cells = cells_taken;
-            self.ships.insert(ship);
+    pub fn setup(&mut self, config:BoardConfig) -> Result<(), &str> {
+        if let BoardConfig::Manual(ship_positions) = config {
+            for (shiptype, (start_pos, dir)) in ship_positions {
+                let mut ship = Ship::new(shiptype);
+                let place_result = self.place_ship_manual(&ship, &start_pos, &dir);
+                if let Ok(cells_taken) = place_result {
+                    ship.cells = cells_taken;
+                    self.ships.insert(ship);
+                }
+                else {
+                    return Err("Invalid Position for Ship")
+                }
+            }
+            return Ok(())
+        }
+
+        else {
+            for shiptype in ShipType::iter() {
+                let mut ship = Ship::new(shiptype);
+                let cells_taken = self.place_ship_auto(&ship);
+                ship.cells = cells_taken;
+                self.ships.insert(ship);
+            }
+            return Ok(())
         }
     }
 
@@ -107,7 +161,7 @@ impl Board {
         unoccupied_cells
     }
 
-    pub fn place_ship(&mut self, ship:&Ship) -> Vec<Position> {
+    pub fn place_ship_auto(&mut self, ship:&Ship) -> Vec<Position> {
         // In Progress
         let cells_needed = ship.ship_type.get_size() as usize;
         let unoccupied_cells = self.get_unoccupied_cells();
@@ -117,7 +171,7 @@ impl Board {
         while ! ship_placed {
             cells_taken.clear();  // Reset cells taken
             // Pick a random start position
-            let i = rand::thread_rng().gen_range(0, unoccupied_cells.len());
+            let i = rand::thread_rng().gen_range(0..unoccupied_cells.len());
             let start_pos = unoccupied_cells.iter().nth(i).unwrap().clone();
             let start_cell = self.cells.get(&start_pos).unwrap();
             if start_cell.is_occupied() {
@@ -160,6 +214,40 @@ impl Board {
         }
         // Return cells taken.
         cells_taken
+    }
+
+    pub fn place_ship_manual(&mut self, ship: &Ship, start_position: &Position, direction: &Direction) -> Result<Vec<Position>, &str> {
+        let cells_needed = ship.ship_type.get_size() as usize;
+        let start_cell = self.cells.get(start_position).unwrap();
+        let mut cells_taken: Vec<Position> = Vec::new();
+        let start_pos = start_position.clone();
+        let dir = direction.clone();
+        cells_taken.push(start_pos);
+        // Start moving
+        let mut current_pos = start_pos.clone();
+        for i in 1..cells_needed {
+            if let None = self.get_next_cell(start_pos, dir) {
+                return Err("Ship fell outside the board")
+            }
+            // Check if next cell is occupied
+            let next_pos = self.get_next_pos(current_pos, dir);
+            if !self.is_valid_position(&next_pos) {
+                return Err("Ship fell outside the board")
+            }
+            let next_cell = self.cells.get(&next_pos).unwrap();
+            if next_cell.is_occupied() {
+                return Err("Collision with another ship")
+            }
+            current_pos = next_pos.clone();
+            cells_taken.push(current_pos);
+        }
+        // Set of taken cells is finalized.
+        // Now we can set them as occupied.
+        for pos in cells_taken.iter() {
+            let cell = self.cells.get_mut(pos).unwrap();
+            cell.set_occupied();
+        }
+        Ok(cells_taken)
     }
 
     pub fn get_contents(&self) -> [[char; 9]; 9] {
@@ -294,7 +382,7 @@ impl Ship {
 }
 
 
-#[derive(Hash, Eq, PartialEq, Debug, EnumIter)]
+#[derive(Hash, Clone, Copy, Eq, PartialEq, Debug, EnumIter)]
 pub enum ShipType {
     C5,  // Canberra-class Landing Helicopter Dock
     H4,  // Hobart-class Destroyer
@@ -324,7 +412,7 @@ pub enum DirectionName {
 
 impl Distribution<DirectionName> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> DirectionName {
-        match rng.gen_range(0, 4) {
+        match rng.gen_range(0..4) {
             0 => DirectionName::Up,
             1 => DirectionName::Down,
             2 => DirectionName::Left,
@@ -409,8 +497,11 @@ pub fn command_handler(board: &mut Option<Board>, cmd:GameCommand) -> CommandRes
     match cmd {
         GameCommand::StartGame => {
             let mut board_new = Board::new();
-            board_new.setup();
-            return CommandResult::Some(board_new)
+            let r = board_new.setup(BoardConfig::Auto);
+            match r {
+                Ok(_) => return CommandResult::Some(board_new),
+                Err(_) => return CommandResult::None,
+            }
         }
         GameCommand::Cell(x,y) => {
             // Make sure a board exists
